@@ -48,6 +48,7 @@ int send_client_initial_packet (SESSION * session)
     unsigned int len_idx;
     
     struct buf* b = buf_new();
+    const BIGNUM* n;
 
     buf_append_u16 (b, 3); /* protocol version */
 
@@ -63,7 +64,8 @@ int send_client_initial_packet (SESSION * session)
     buf_append_data (b, session->client_random_16, 16);
     buf_append_data (b, session->my_pub_key, 96);
 
-    BN_bn2bin (session->rsa->n, session->rsa_pub_exp);
+    RSA_get0_key(session->rsa, &n, NULL, NULL);
+    BN_bn2bin (n, session->rsa_pub_exp);
     buf_append_data (b, session->rsa_pub_exp, sizeof(session->rsa_pub_exp));
 
     buf_append_u8 (b, 0); /* length of random data */

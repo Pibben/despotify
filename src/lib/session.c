@@ -43,6 +43,10 @@ static unsigned char DH_prime[] = {
 SESSION *session_init_client (void)
 {
     SESSION *session;
+    const BIGNUM* p;
+    const BIGNUM* g;
+    const BIGNUM* pub_key;
+    const BIGNUM* priv_key;
 
     if ((session = (SESSION *) calloc (1, sizeof (SESSION))) == NULL)
         return NULL;
@@ -70,12 +74,18 @@ SESSION *session_init_client (void)
      *
      */
     session->dh = DH_new ();
-    session->dh->p = BN_bin2bn (DH_prime, 96, NULL);
-    session->dh->g = BN_bin2bn (DH_generator, 1, NULL);
+    
+    DH_set0_pqg(session->dh,
+                BN_bin2bn (DH_prime, 96, NULL),
+                NULL,
+                BN_bin2bn (DH_generator, 1, NULL));
+    
     assert (DH_generate_key (session->dh) == 1);
 
-    BN_bn2bin (session->dh->priv_key, session->my_priv_key);
-    BN_bn2bin (session->dh->pub_key, session->my_pub_key);
+    
+    DH_get0_key(session->dh, &pub_key, &priv_key);
+    BN_bn2bin (priv_key, session->my_priv_key);
+    BN_bn2bin (pub_key, session->my_pub_key);
 
     /*
      * Found in Storage.dat (cache) at offset 16.
