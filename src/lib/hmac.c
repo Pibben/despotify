@@ -15,8 +15,8 @@
 #define HMAC_SHA1_BLOCKSIZE 64
 
 void sha1_hmac(unsigned char *inputkey, size_t inputkeylen, 
-	       unsigned char *inputmsg, size_t msglen,
-	       unsigned char *dst)
+           unsigned char *inputmsg, size_t msglen,
+           unsigned char *dst)
 {
   SHA1_CTX ctx;
   size_t keylen = inputkeylen; 
@@ -32,7 +32,7 @@ void sha1_hmac(unsigned char *inputkey, size_t inputkeylen,
       SHA1Init(&ctx);
       SHA1Update(&ctx,inputkey,keylen);
       SHA1Final(keydigest,&ctx);
-		 
+         
       key = keydigest; 
       keylen = 20; 
     }

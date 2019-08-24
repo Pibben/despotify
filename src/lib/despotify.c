@@ -60,7 +60,7 @@ static void* despotify_thread(void* arg)
         unsigned char* payload;
 
         if(packet_read(s, &hdr, &payload))
-		break;
+        break;
 
         handle_packet(s, hdr.cmd, payload, hdr.len);
         DSFYfree(payload); /* Allocated in packet_read() */
@@ -457,7 +457,7 @@ void despotify_next(struct despotify_session* ds)
         ds->offset = 0;
     }
     else
-    	snd_init(ds);
+        snd_init(ds);
 
     if (snd_next(ds))
         return;

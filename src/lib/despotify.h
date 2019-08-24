@@ -153,8 +153,8 @@ struct ds_snd_fifo /* internal use */
     int watermark; /* Low watermark */
     int lastcmd;
 
-    struct ds_snd_buffer* start;	/* First buffer */
-    struct ds_snd_buffer* end;	/* Last buffer */
+    struct ds_snd_buffer* start;    /* First buffer */
+    struct ds_snd_buffer* end;  /* Last buffer */
 };
 
 struct ds_pcm_data

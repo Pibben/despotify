@@ -1,4 +1,4 @@
-/*	$OpenBSD: sha1.c,v 1.12 2003/07/21 20:37:08 millert Exp $	*/
+/*  $OpenBSD: sha1.c,v 1.12 2003/07/21 20:37:08 millert Exp $   */
 
 /*
  * SHA-1 in C
@@ -18,7 +18,7 @@
 static char rcsid[] = "$OpenBSD: sha1.c,v 1.12 2003/07/21 20:37:08 millert Exp $";
 #endif /* LIBC_SCCS and not lint */
 
-#define SHA1HANDSOFF		/* Copies data before messing with it. */
+#define SHA1HANDSOFF        /* Copies data before messing with it. */
 
 #include <stdint.h>
 #include <sys/param.h>
@@ -200,16 +200,16 @@ SHA1Update(SHA1_CTX *context, const u_char *data, u_int len)
 
     j = context->count[0];
     if ((context->count[0] += len << 3) < j)
-	context->count[1] += (len>>29)+1;
+    context->count[1] += (len>>29)+1;
     j = (j >> 3) & 63;
     if ((j + len) > 63) {
-	(void)memcpy(&context->buffer[j], data, (i = 64-j));
-	SHA1Transform(context->state, context->buffer);
-	for ( ; i + 63 < len; i += 64)
-	    SHA1Transform(context->state, &data[i]);
-	j = 0;
+    (void)memcpy(&context->buffer[j], data, (i = 64-j));
+    SHA1Transform(context->state, context->buffer);
+    for ( ; i + 63 < len; i += 64)
+        SHA1Transform(context->state, &data[i]);
+    j = 0;
     } else {
-	i = 0;
+    i = 0;
     }
     (void)memcpy(&context->buffer[j], &data[i], len - i);
 }
@@ -225,17 +225,17 @@ SHA1Final(u_char digest[20], SHA1_CTX *context)
     u_char finalcount[8];
 
     for (i = 0; i < 8; i++) {
-	finalcount[i] = (u_char)((context->count[(i >= 4 ? 0 : 1)]
-	 >> ((3-(i & 3)) * 8) ) & 255);	 /* Endian independent */
+    finalcount[i] = (u_char)((context->count[(i >= 4 ? 0 : 1)]
+     >> ((3-(i & 3)) * 8) ) & 255);  /* Endian independent */
     }
     SHA1Update(context, (u_char *)"\200", 1);
     while ((context->count[0] & 504) != 448)
-	SHA1Update(context, (u_char *)"\0", 1);
+    SHA1Update(context, (u_char *)"\0", 1);
     SHA1Update(context, finalcount, 8);  /* Should cause a SHA1Transform() */
 
     if (digest) {
-	for (i = 0; i < 20; i++)
-	    digest[i] = (u_char)
-		((context->state[i>>2] >> ((3-(i & 3)) * 8) ) & 255);
+    for (i = 0; i < 20; i++)
+        digest[i] = (u_char)
+        ((context->state[i>>2] >> ((3-(i & 3)) * 8) ) & 255);
     }
 }

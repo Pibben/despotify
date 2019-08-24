@@ -16,24 +16,24 @@
 #include "despotify.h"
 
 #if defined(__linux__) 
-	#include <endian.h>
+    #include <endian.h>
 #endif
 #if defined(__FreeBSD__)
-	#include <machine/endian.h>
-	#define __BYTE_ORDER _BYTE_ORDER
-	#define __LITTLE_ENDIAN _LITTLE_ENDIAN
+    #include <machine/endian.h>
+    #define __BYTE_ORDER _BYTE_ORDER
+    #define __LITTLE_ENDIAN _LITTLE_ENDIAN
 #endif
 
 
 #if defined(__BYTE_ORDER)
-	#if __BYTE_ORDER == __LITTLE_ENDIAN
-		#define SYSTEM_ENDIAN 0
-	#else
-		#define SYSTEM_ENDIAN 1
-	#endif
+    #if __BYTE_ORDER == __LITTLE_ENDIAN
+        #define SYSTEM_ENDIAN 0
+    #else
+        #define SYSTEM_ENDIAN 1
+    #endif
 #else
-	#warning "Unknown endian - Assuming little endian"
-	#define SYSTEM_ENDIAN 0
+    #warning "Unknown endian - Assuming little endian"
+    #define SYSTEM_ENDIAN 0
 #endif
 
 
@@ -56,7 +56,7 @@ bool snd_init (struct despotify_session* ds);
 void snd_destroy (struct despotify_session *);
 void snd_set_data_callback (struct despotify_session *, audio_request_callback, void *);
 void snd_set_end_callback (struct despotify_session* ds,
-			   audio_request_callback callback, void *arg);
+               audio_request_callback callback, void *arg);
 void snd_set_timetell_callback (struct despotify_session* ds,
                                 time_tell_callback callback);
 

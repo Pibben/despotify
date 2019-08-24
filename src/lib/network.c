@@ -12,19 +12,19 @@
  
 int network_init (void)
 {
-	#ifdef __use_winsock__
-	WSADATA wsaData;
-	if (WSAStartup(MAKEWORD(1,1), &wsaData) != 0) {
-		fprintf (stderr, "Winsock failed. \n");
-		return -1;
-	}
-	#endif
-	return 0;
+    #ifdef __use_winsock__
+    WSADATA wsaData;
+    if (WSAStartup(MAKEWORD(1,1), &wsaData) != 0) {
+        fprintf (stderr, "Winsock failed. \n");
+        return -1;
+    }
+    #endif
+    return 0;
 }
 int network_cleanup (void)
 {
-	#ifdef __use_winsock__
-	return WSACleanup();
-	#endif
-	return 0;
+    #ifdef __use_winsock__
+    return WSACleanup();
+    #endif
+    return 0;
 }

@@ -14,8 +14,8 @@
  */
 struct packet_header
 {
-	unsigned char cmd;
-	unsigned short len;
+    unsigned char cmd;
+    unsigned short len;
 } __attribute__ ((packed));
 typedef struct packet_header PHEADER;
 
