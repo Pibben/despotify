@@ -1,5 +1,5 @@
 /*
- * $Id$
+ * $Id: sndqueue.c 517 2011-12-11 20:13:34Z dalus $
  *
  */
 
@@ -64,7 +64,7 @@ bool snd_init(struct despotify_session *ds)
 	ds->dlstate = DL_FILLING;
 
 	/* This is the fifo that will hold fragments of compressed audio */
-        ds->fifo = calloc(1, sizeof(struct snd_fifo));
+        ds->fifo = calloc(1, sizeof(struct ds_snd_fifo));
         if (!ds->fifo)
 		return false;
         ds->fifo->maxbytes = 1024 * 1024; /* 1 MB default buffer size */
@@ -95,7 +95,7 @@ void snd_destroy (struct despotify_session* ds)
 
 		/* free buffers */
 		while (ds->fifo->start) {
-                        struct snd_buffer* b = ds->fifo->start;
+                        struct ds_snd_buffer* b = ds->fifo->start;
 			ds->fifo->start = ds->fifo->start->next;
 			free (b->ptr);
 			free (b);
@@ -169,7 +169,7 @@ int snd_stop (struct despotify_session *ds)
 
 	/* free the ogg fifo */
 	while (ds->fifo->start) {
-		struct snd_buffer* b = ds->fifo->start;
+		struct ds_snd_buffer* b = ds->fifo->start;
 		ds->fifo->start = ds->fifo->start->next;
 		free(b->ptr);
 		free(b);
@@ -192,8 +192,8 @@ int snd_next(struct despotify_session *ds)
     pthread_mutex_lock(&ds->fifo->lock);
 
     /* go through fifo and look for next track */
-    struct snd_buffer* b;
-    struct snd_buffer* next;
+    struct ds_snd_buffer* b;
+    struct ds_snd_buffer* next;
     for (b = ds->fifo->start; b; b = next) {
         if (b->cmd == SND_CMD_START)
             break;
@@ -259,7 +259,7 @@ void snd_ioctl (struct despotify_session* ds, int cmd, void *data, int length)
             return;
         }
 
-        struct snd_buffer* buff = malloc(sizeof(struct snd_buffer));
+        struct ds_snd_buffer* buff = malloc(sizeof(struct ds_snd_buffer));
 	if (!buff) {
 		perror ("malloc failed");
 		exit (-1);
@@ -334,7 +334,7 @@ int snd_consume_data(struct despotify_session* ds, int req_bytes, void* private,
                            " %zd bytes requested. Totbytes: %d\n",
                            req_bytes, ds->fifo->totbytes );
 
-        struct snd_buffer* b = ds->fifo->start;
+        struct ds_snd_buffer* b = ds->fifo->start;
         if (!b)
             break;
 
@@ -475,6 +475,7 @@ size_t snd_ov_read_callback(void *ptr, size_t size, size_t nmemb, void* session)
 #ifdef MP3_SUPPORT
 static int mpeg_consume(void* source, int bytes, void* private, int offset)
 {
+   (void)offset;
     mpg123_feed(private,source,bytes);
     return bytes;
 }
@@ -483,13 +484,13 @@ static int mpeg_consume(void* source, int bytes, void* private, int offset)
 int snd_mpeg_feed_more_data(struct despotify_session* ds) 
 {
     /* TODO: Fix this sizeof hack */
-    struct pcm_data data;
+    struct ds_pcm_data data;
 
     return snd_consume_data(ds,sizeof(data.buf),ds->mf,mpeg_consume);
 }
 #endif
 
-int snd_do_vorbis(struct despotify_session* ds, struct pcm_data* pcm ) {
+int snd_do_vorbis(struct despotify_session* ds, struct ds_pcm_data* pcm ) {
     if (!ds->vf) {
         DSFYDEBUG ("Initializing vorbisfile struct\n");
 
@@ -526,9 +527,15 @@ int snd_do_vorbis(struct despotify_session* ds, struct pcm_data* pcm ) {
     pcm->channels = vi->channels;
 
     while (1) {
+        ssize_t r;
         /* decode to pcm */
-        ssize_t r = ov_read(ds->vf, pcm->buf, sizeof(pcm->buf),
-                            SYSTEM_ENDIAN, 2, 1, NULL);
+#if defined(USE_TREMOR)
+        r = ov_read(ds->vf, pcm->buf, sizeof(pcm->buf),
+                NULL);
+#else
+        r = ov_read(ds->vf, pcm->buf, sizeof(pcm->buf),
+                SYSTEM_ENDIAN, 2, 1, NULL);
+#endif
 
         /* assume no valid data read. */
         pcm->len = 0;
@@ -568,7 +575,7 @@ int snd_do_vorbis(struct despotify_session* ds, struct pcm_data* pcm ) {
     return 0;
 }
 
-int snd_do_mpeg(struct despotify_session* ds, struct pcm_data* pcm) {
+int snd_do_mpeg(struct despotify_session* ds, struct ds_pcm_data* pcm) {
 #ifdef MP3_SUPPORT
 	int err = MPG123_OK;
 	size_t bytes = 0;
@@ -707,8 +714,8 @@ int snd_stream_is_vorbis(struct despotify_session* ds) {
     	   _DSFYDEBUG ("Got data\n");
     	}
 
-    	struct snd_buffer* b_start = ds->fifo->start;
-    	struct snd_buffer* b_head = ds->fifo->start->next;
+    	struct ds_snd_buffer* b_start = ds->fifo->start;
+    	struct ds_snd_buffer* b_head = ds->fifo->start->next;
     	if (!b_start || !b_head) {
     	    res = -2;
     	    break;
@@ -734,7 +741,7 @@ int snd_stream_is_vorbis(struct despotify_session* ds) {
 
 
 
-int snd_get_pcm(struct despotify_session* ds, struct pcm_data* pcm)
+int snd_get_pcm(struct despotify_session* ds, struct ds_pcm_data* pcm)
 {
     if (!ds || !ds->fifo || !ds->fifo->start) {
         pcm->len = 0;

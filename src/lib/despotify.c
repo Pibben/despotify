@@ -81,7 +81,6 @@ struct despotify_session* despotify_init_client(void(*callback)(struct despotify
     if (!ds->session)
         return NULL;
 
-    ds->thread = (pthread_t)0;
     pthread_cond_init(&ds->sync_cond, NULL);
     pthread_mutex_init(&ds->sync_mutex, NULL);
 
@@ -185,14 +184,12 @@ void despotify_free(struct despotify_session* ds, bool should_disconnect)
         session_disconnect(ds->session);
     }
 
-    if (ds->thread) {
-        DSFYDEBUG("Canceling despotify networking thread\n");
-        r = pthread_cancel(ds->thread);
-        DSFYDEBUG("pthread_cancel() returned %d\n", r);
+    DSFYDEBUG("Canceling despotify networking thread\n");
+    r = pthread_cancel(ds->thread);
+    DSFYDEBUG("pthread_cancel() returned %d\n", r);
     
-        r = pthread_join(ds->thread, NULL);
-        DSFYDEBUG("Joined despotify networking thread, return value is %d\n", r);
-    }
+    r = pthread_join(ds->thread, NULL);
+    DSFYDEBUG("Joined despotify networking thread, return value is %d\n", r);
 
     snd_destroy(ds);
 
@@ -248,7 +245,7 @@ static int despotify_aes_callback(CHANNEL* ch,
 {
     if (ch->state == CHANNEL_DATA) {
         struct despotify_session* ds = ch->private;
-        struct track* t = ds->track;
+        struct ds_track* t = ds->track;
 
         if (t->key)
             DSFYfree(t->key);
@@ -269,8 +266,8 @@ static int despotify_aes_callback(CHANNEL* ch,
 
         /* Add SND_CMD_START to buffer chain,
            with a copy of the track struct */
-        struct track* copy = malloc(sizeof(struct track));
-        memcpy(copy, ds->track, sizeof(struct track));
+        struct ds_track* copy = malloc(sizeof(struct ds_track));
+        memcpy(copy, ds->track, sizeof(struct ds_track));
         snd_ioctl(ds, SND_CMD_START, copy, 0);
     }
 
@@ -406,7 +403,7 @@ int despotify_snd_read_stream(struct despotify_session* ds)
     return 0;
 }
 
-bool despotify_is_track_restricted(struct track* track, const char* country)
+bool despotify_is_track_restricted(struct ds_track* track, const char* country)
 {
     bool allowed = true;
     bool forbidden = false;
@@ -421,7 +418,7 @@ bool despotify_is_track_restricted(struct track* track, const char* country)
 }
 
 bool despotify_play(struct despotify_session* ds,
-                    struct track* t, bool play_as_list)
+                    struct ds_track* t, bool play_as_list)
 {
     if (ds->fifo) {
         snd_stop(ds);
@@ -455,13 +452,23 @@ bool despotify_play(struct despotify_session* ds,
 
 void despotify_next(struct despotify_session* ds)
 {
+    if (ds->fifo) {
+        snd_stop(ds);
+        ds->offset = 0;
+    }
+    else
+    	snd_init(ds);
+
     if (snd_next(ds))
         return;
 
     /* find next playable track */
-    do {
+    while (ds->track)
+    {
         ds->track = ds->track->next;
-    } while (ds->track && !ds->track->playable);
+        if (ds->track->playable)
+            break;
+    }
 
     if (ds->track)
         despotify_play(ds, ds->track, ds->play_as_list);
@@ -477,7 +484,7 @@ bool despotify_stop(struct despotify_session* ds)
     return true;
 }
 
-struct track *despotify_get_current_track(struct despotify_session *ds) {
+struct ds_track *despotify_get_current_track(struct despotify_session *ds) {
     if (ds->track)
         return ds->track;
     return NULL;
@@ -669,13 +676,13 @@ bool despotify_wait_timeout(struct despotify_session* ds){
  *
  */
 
-struct search_result* despotify_search(struct despotify_session* ds,
-                                       char* searchtext, int maxresults)
+struct ds_search_result* despotify_search(struct despotify_session* ds,
+                                       const char* searchtext, int maxresults)
 {
-    struct search_result* search = NULL;
+    struct ds_search_result* search = NULL;
 
     ds->response = buf_new();
-    ds->playlist = calloc(1, sizeof(struct playlist));
+    ds->playlist = calloc(1, sizeof(struct ds_playlist));
 
     char buf[80];
     snprintf(buf, sizeof buf, "Search: %s", searchtext);
@@ -698,11 +705,11 @@ struct search_result* despotify_search(struct despotify_session* ds,
 
     /* Add tracks */
     if (!ds->playlist->tracks)
-        ds->playlist->tracks = calloc(1, sizeof(struct track));
+        ds->playlist->tracks = calloc(1, sizeof(struct ds_track));
 
     struct buf* b = despotify_inflate(ds->response->ptr, ds->response->len);
     if (b) {
-        search = calloc(1, sizeof(struct search_result));
+        search = calloc(1, sizeof(struct ds_search_result));
         DSFYstrncpy(search->query, searchtext, sizeof search->query);
         search->playlist = ds->playlist;
         search->tracks = ds->playlist->tracks;
@@ -721,8 +728,8 @@ struct search_result* despotify_search(struct despotify_session* ds,
     return search;
 }
 
-struct search_result* despotify_search_more(struct despotify_session *ds,
-                                            struct search_result *search,
+struct ds_search_result* despotify_search_more(struct despotify_session *ds,
+                                            struct ds_search_result *search,
                                             int offset, int maxresults)
 {
     if (!search || !search->tracks)
@@ -750,12 +757,12 @@ struct search_result* despotify_search_more(struct despotify_session *ds,
     struct buf* b = despotify_inflate(ds->response->ptr, ds->response->len);
     if (b) {
         /* append at end of list */
-        struct track *t;
+        struct ds_track *t;
         for (t = search->tracks; t; t = t->next)
             if (!t->next)
                 break;
 
-        t = t->next = calloc(1, sizeof(struct track));
+        t = t->next = calloc(1, sizeof(struct ds_track));
 
         ds->playlist->num_tracks += xml_parse_tracklist(t, b->ptr, b->len,
                                                         false, ds->high_bitrate);
@@ -767,7 +774,7 @@ struct search_result* despotify_search_more(struct despotify_session *ds,
     return search;
 }
 
-void despotify_free_search(struct search_result *search) {
+void despotify_free_search(struct ds_search_result *search) {
     despotify_free_playlist(search->playlist);
     xml_free_album(search->albums);
     xml_free_artist(search->artists);
@@ -782,12 +789,12 @@ void despotify_free_search(struct search_result *search) {
 
 static bool despotify_load_tracks(struct despotify_session *ds, bool cache_do_store)
 {
-    struct playlist* pl = ds->playlist;
+    struct ds_playlist* pl = ds->playlist;
 
     if (!pl->num_tracks)
         return true;
 
-    struct track* t = pl->tracks;
+    struct ds_track* t = pl->tracks;
 
     /* construct an array of 16-byte track ids */
     char* tracklist = malloc(MAX_BROWSE_REQ * 16);
@@ -800,7 +807,7 @@ static bool despotify_load_tracks(struct despotify_session *ds, bool cache_do_st
     for (int totcount=0; totcount < pl->num_tracks; totcount += count) {
         ds->response = buf_new();
 
-        struct track* firsttrack = t;
+        struct ds_track* firsttrack = t;
         for (count = 0; t && count < MAX_BROWSE_REQ; t = t->next, count++)
             hex_ascii_to_bytes(t->track_id, tracklist + count * 16, 16);
 
@@ -864,22 +871,22 @@ static bool despotify_load_tracks(struct despotify_session *ds, bool cache_do_st
     if (track_count < pl->num_tracks) {
         for (t = pl->tracks; t; t = t->next) {
             if (!t->has_meta_data) {
-                struct track* tt;
+                struct ds_track* tt;
                 for (tt = pl->tracks; tt; tt = tt->next) {
                     if (tt->has_meta_data &&
                         !strncmp(tt->track_id, t->track_id, sizeof tt->track_id)) {
-                        struct track* next = t->next;
+                        struct ds_track* next = t->next;
                         *t = *tt;
                         t->next = next;
 
                         /* deep copy of artist list */
-                        struct artist* a = calloc(1, sizeof(struct artist));
+                        struct ds_artist* a = calloc(1, sizeof(struct ds_artist));
                         t->artist = a;
-                        struct artist* ta;
+                        struct ds_artist* ta;
                         for (ta = tt->artist; ta; ta = ta->next) {
                             *a = *ta;
                             if (ta->next)
-                                a = a->next = calloc(1, sizeof(struct artist));
+                                a = a->next = calloc(1, sizeof(struct ds_artist));
                         }
 
                         /* deep copy of georestrictions. */
@@ -910,10 +917,10 @@ static bool despotify_load_tracks(struct despotify_session *ds, bool cache_do_st
     return true;
 }
 
-struct playlist* despotify_get_playlist(struct despotify_session *ds,
+struct ds_playlist* despotify_get_playlist(struct despotify_session *ds,
                                         char* playlist_id, bool cache_do_store)
 {
-    ds->playlist = calloc(1, sizeof(struct playlist));
+    ds->playlist = calloc(1, sizeof(struct ds_playlist));
 
     /* check cache */
     if (ds->use_cache && playlist_id && cache_contains(playlist_id)) {
@@ -1002,12 +1009,12 @@ struct playlist* despotify_get_playlist(struct despotify_session *ds,
     return ds->playlist;
 }
 
-void despotify_free_playlist(struct playlist* p)
+void despotify_free_playlist(struct ds_playlist* p)
 {
     xml_free_playlist(p);
 }
 
-struct playlist* despotify_get_stored_playlists(struct despotify_session *ds)
+struct ds_playlist* despotify_get_stored_playlists(struct despotify_session *ds)
 {
     /* save cache setting */
     bool old_use_cache = ds->use_cache;
@@ -1017,9 +1024,9 @@ struct playlist* despotify_get_stored_playlists(struct despotify_session *ds)
 
     /* load list of lists */
     DSFYDEBUG("Requesting meta playlist\n");
-    struct playlist* metalist = despotify_get_playlist(ds, NULL, false);
-    struct playlist* root = NULL;
-    struct playlist* prev = NULL;
+    struct ds_playlist* metalist = despotify_get_playlist(ds, NULL, false);
+    struct ds_playlist* root = NULL;
+    struct ds_playlist* prev = NULL;
 
     /* check meta playlist revision */
     DSFYDEBUG("Meta-Playlist revisions (remote: %d, local: %d)\n",
@@ -1043,9 +1050,9 @@ struct playlist* despotify_get_stored_playlists(struct despotify_session *ds)
         DSFYDEBUG("Stored playlists didn't change! use_cache = %d\n", ds->use_cache);
     }
 
-    for (struct playlist* p = metalist; p && p->playlist_id[0]; p = p->next) {
+    for (struct ds_playlist* p = metalist; p && p->playlist_id[0]; p = p->next) {
         DSFYDEBUG("Requesting playlist with ID '%s'\n", p->playlist_id);
-        struct playlist* new = despotify_get_playlist(ds, p->playlist_id, old_use_cache);
+        struct ds_playlist* new = despotify_get_playlist(ds, p->playlist_id, old_use_cache);
         if (prev)
             prev->next = new;
         else
@@ -1061,7 +1068,7 @@ struct playlist* despotify_get_stored_playlists(struct despotify_session *ds)
 }
 
 bool despotify_rename_playlist(struct despotify_session *ds,
-                               struct playlist *playlist, char *name)
+                               struct ds_playlist *playlist, char *name)
 {
     if (strcmp(playlist->author, ds->user_info->username)) {
         ds->last_error = "Not your playlist.";
@@ -1119,7 +1126,7 @@ bool despotify_rename_playlist(struct despotify_session *ds,
 }
 
 bool despotify_set_playlist_collaboration(struct despotify_session *ds,
-                                          struct playlist *playlist,
+                                          struct ds_playlist *playlist,
                                           bool collaborative)
 {
     if (strcmp(playlist->author, ds->user_info->username)) {
@@ -1181,10 +1188,10 @@ bool despotify_set_playlist_collaboration(struct despotify_session *ds,
  *
  */
 
-struct artist_browse* despotify_get_artist(struct despotify_session* ds,
+struct ds_artist_browse* despotify_get_artist(struct despotify_session* ds,
                                            char* artist_id)
 {
-    ds->artist_browse = calloc(1, sizeof(struct artist_browse));
+    ds->artist_browse = calloc(1, sizeof(struct ds_artist_browse));
 
     /* check cache */
     if (ds->use_cache && cache_contains(artist_id)) {
@@ -1235,7 +1242,7 @@ struct artist_browse* despotify_get_artist(struct despotify_session* ds,
     return ds->artist_browse;
 }
 
-void despotify_free_artist_browse(struct artist_browse* a)
+void despotify_free_artist_browse(struct ds_artist_browse* a)
 {
     xml_free_artist_browse(a);
 }
@@ -1281,10 +1288,10 @@ void* despotify_get_image(struct despotify_session* ds, char* image_id, int* len
     return image;
 }
 
-struct album_browse* despotify_get_album(struct despotify_session* ds,
+struct ds_album_browse* despotify_get_album(struct despotify_session* ds,
                                          char* album_id)
 {
-    ds->album_browse = calloc(1, sizeof(struct album_browse));
+    ds->album_browse = calloc(1, sizeof(struct ds_album_browse));
 
     /* check cache */
     if (ds->use_cache && cache_contains(album_id)) {
@@ -1335,12 +1342,12 @@ struct album_browse* despotify_get_album(struct despotify_session* ds,
     return ds->album_browse;
 }
 
-void despotify_free_album_browse(struct album_browse* a)
+void despotify_free_album_browse(struct ds_album_browse* a)
 {
     xml_free_album_browse(a);
 }
 
-struct track* despotify_get_tracks(struct despotify_session* ds, char* track_ids[], int num_tracks)
+struct ds_track* despotify_get_tracks(struct despotify_session* ds, char* track_ids[], int num_tracks)
 {
     if (num_tracks > MAX_BROWSE_REQ) {
         ds->last_error = "Too many ids in track browse request";
@@ -1349,7 +1356,7 @@ struct track* despotify_get_tracks(struct despotify_session* ds, char* track_ids
 
     /* construct an array of 16-byte track ids */
     char* tracklist = malloc(num_tracks * 16);
-    struct track* first = calloc(1, sizeof(struct track));
+    struct ds_track* first = calloc(1, sizeof(struct ds_track));
     ds->response = buf_new();
 
     for (int i = 0; i < num_tracks; i++)
@@ -1380,7 +1387,7 @@ struct track* despotify_get_tracks(struct despotify_session* ds, char* track_ids
     buf_free(ds->response);
     free(tracklist);
     
-    struct track* t;
+    struct ds_track* t;
     for(t = first; t; t = t->next) {
         t->geo_restricted = despotify_is_track_restricted(t, ds->user_info->country);
         if(t->geo_restricted)
@@ -1390,7 +1397,7 @@ struct track* despotify_get_tracks(struct despotify_session* ds, char* track_ids
     return first;
 }
 
-struct track* despotify_get_track(struct despotify_session* ds, char* track_id)
+struct ds_track* despotify_get_track(struct despotify_session* ds, char* track_id)
 {
     char* track_ids[1];
     track_ids[0] = track_id;
@@ -1398,7 +1405,7 @@ struct track* despotify_get_track(struct despotify_session* ds, char* track_id)
     return despotify_get_tracks(ds, track_ids, 1);
 }
 
-void despotify_free_track(struct track* t)
+void despotify_free_track(struct ds_track* t)
 {
     xml_free_track(t);
 }
@@ -1410,7 +1417,7 @@ void despotify_free_track(struct track* t)
  *
  */
 
-static void baseconvert(char *src, char *dest,
+static void baseconvert(const char *src, char *dest,
                       int frombase, int tobase, int padlen)
 {
     static const char alphabet[] =
@@ -1447,26 +1454,26 @@ static void baseconvert(char *src, char *dest,
     } while (newlen != 0);
 }
 
-void despotify_id2uri(char* id, char* uri)
+void despotify_id2uri(const char* id, char* uri)
 {
     baseconvert(id, uri, 16, 62, 22);
 }
 
-void despotify_uri2id(char* uri, char* id)
+void despotify_uri2id(const char* uri, char* id)
 {
     baseconvert(uri, id, 62, 16, 32);
 }
 
 
-struct link* despotify_link_from_uri(char *uri)
+struct ds_link* despotify_link_from_uri(const char *uri)
 {
-    struct link* link = calloc(1, sizeof(struct link));
+    struct ds_link* link = calloc(1, sizeof(struct ds_link));
 
     link->type = LINK_TYPE_INVALID;
     link->uri = uri;
 
     if (!strncmp(uri, "spotify:album:", 13)) {
-        char* id = uri + 14;
+        const char* id = uri + 14;
 
         if (strlen(id) != 22) /* id must be 22 chars */
             return link;
@@ -1475,7 +1482,7 @@ struct link* despotify_link_from_uri(char *uri)
         link->arg = id;
 
     } else if (!strncmp(uri, "spotify:artist:", 14)) {
-        char* id = uri + 15;
+        const char* id = uri + 15;
 
         if (strlen(id) != 22) /* id must be 22 chars */
             return link;
@@ -1484,7 +1491,7 @@ struct link* despotify_link_from_uri(char *uri)
         link->arg = id;
 
     } else if (!strncmp(uri, "spotify:search:", 14)) {
-        char* searcharg = uri + 15;
+        const char* searcharg = uri + 15;
 
         if (strlen(searcharg) == 0) /* must search for something */
             return link;
@@ -1494,7 +1501,7 @@ struct link* despotify_link_from_uri(char *uri)
 
     } else if (!strncmp(uri, "spotify:user:", 12)) {
         int userlen = strchr(uri + 13, ':') - (uri + 13);
-        char *id = uri + userlen + 23;
+        const char *id = uri + userlen + 23;
 
         if (strlen(id) != 22) /* id must be 22 chars */
             return link;
@@ -1503,7 +1510,7 @@ struct link* despotify_link_from_uri(char *uri)
         link->arg = id;
 
     } else if (!strncmp(uri, "spotify:track:", 13)) {
-        char* id = uri + 14;
+        const char* id = uri + 14;
 
         if (strlen(id) != 22) /* id must be 22 chars */
             return link;
@@ -1515,7 +1522,7 @@ struct link* despotify_link_from_uri(char *uri)
     return link;
 }
 
-struct album_browse* despotify_link_get_album(struct despotify_session* ds, struct link* link)
+struct ds_album_browse* despotify_link_get_album(struct despotify_session* ds, struct ds_link* link)
 {
     char buf[33];
 
@@ -1524,7 +1531,7 @@ struct album_browse* despotify_link_get_album(struct despotify_session* ds, stru
     return despotify_get_album(ds, buf);
 }
 
-struct artist_browse* despotify_link_get_artist(struct despotify_session* ds, struct link* link)
+struct ds_artist_browse* despotify_link_get_artist(struct despotify_session* ds, struct ds_link* link)
 {
     char buf[33];
 
@@ -1533,12 +1540,12 @@ struct artist_browse* despotify_link_get_artist(struct despotify_session* ds, st
     return despotify_get_artist(ds, buf);
 }
 
-struct search_result* despotify_link_get_search(struct despotify_session* ds, struct link* link)
+struct ds_search_result* despotify_link_get_search(struct despotify_session* ds, struct ds_link* link)
 {
     return despotify_search(ds, link->arg, MAX_SEARCH_RESULTS);
 }
 
-struct playlist* despotify_link_get_playlist(struct despotify_session* ds, struct link* link)
+struct ds_playlist* despotify_link_get_playlist(struct despotify_session* ds, struct ds_link* link)
 {
     char buf[35];
 
@@ -1551,7 +1558,7 @@ struct playlist* despotify_link_get_playlist(struct despotify_session* ds, struc
     /* disable caching */
     ds->use_cache = false;
 
-    struct playlist *playlist = despotify_get_playlist(ds, buf, old_use_cache);
+    struct ds_playlist *playlist = despotify_get_playlist(ds, buf, old_use_cache);
 
     /* reset cache setting to old value */
     ds->use_cache = old_use_cache;
@@ -1559,7 +1566,7 @@ struct playlist* despotify_link_get_playlist(struct despotify_session* ds, struc
     return playlist;
 }
 
-struct track* despotify_link_get_track(struct despotify_session* ds, struct link* link)
+struct ds_track* despotify_link_get_track(struct despotify_session* ds, struct ds_link* link)
 {
     char buf[33];
 
@@ -1568,12 +1575,12 @@ struct track* despotify_link_get_track(struct despotify_session* ds, struct link
     return despotify_get_track(ds, buf);
 }
 
-void despotify_free_link(struct link* link)
+void despotify_free_link(struct ds_link* link)
 {
     free(link);
 }
 
-char* despotify_album_to_uri(struct album_browse* album, char* dest)
+char* despotify_album_to_uri(struct ds_album_browse* album, char* dest)
 {
     char uri[23];
 
@@ -1583,7 +1590,7 @@ char* despotify_album_to_uri(struct album_browse* album, char* dest)
     return dest;
 }
 
-char* despotify_artist_to_uri(struct artist_browse* artist, char* dest)
+char* despotify_artist_to_uri(struct ds_artist_browse* artist, char* dest)
 {
     char uri[23];
 
@@ -1593,7 +1600,7 @@ char* despotify_artist_to_uri(struct artist_browse* artist, char* dest)
     return dest;
 }
 
-char* despotify_playlist_to_uri(struct playlist* playlist, char* dest)
+char* despotify_playlist_to_uri(struct ds_playlist* playlist, char* dest)
 {
     char uri[23];
     char id[33];
@@ -1609,7 +1616,7 @@ char* despotify_playlist_to_uri(struct playlist* playlist, char* dest)
 }
 
 
-char* despotify_search_to_uri(struct search_result* search, char* dest)
+char* despotify_search_to_uri(struct ds_search_result* search, char* dest)
 {
     sprintf(dest, "spotify:search:%s", search->query);
 
@@ -1617,7 +1624,7 @@ char* despotify_search_to_uri(struct search_result* search, char* dest)
 }
 
 
-char* despotify_track_to_uri(struct track* track, char* dest)
+char* despotify_track_to_uri(struct ds_track* track, char* dest)
 {
     char uri[23];
 
@@ -1627,7 +1634,7 @@ char* despotify_track_to_uri(struct track* track, char* dest)
     return dest;
 }
 
-int despotify_get_pcm(struct despotify_session* ds, struct pcm_data* pcm)
+int despotify_get_pcm(struct despotify_session* ds, struct ds_pcm_data* pcm)
 {
     return snd_get_pcm(ds, pcm);
 }

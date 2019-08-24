@@ -31,6 +31,13 @@ ifeq ($(MP3_SUPPORT), 1)
     LDFLAGS += -lmpg123
 endif
 
+ifeq ($(USE_TREMOR), 1)
+	CFLAGS += -DUSE_TREMOR=1
+	LDFLAGS += -lvorbisidec -lmpg123
+else
+	LDFLAGS += -lvorbisfile -lmpg123
+endif
+
 # Mac OS X specifics
 ifeq ($(shell uname -s),Darwin)
     LT = glibtool --tag=CC

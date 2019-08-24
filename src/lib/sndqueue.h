@@ -1,5 +1,5 @@
 /*
- * $Id$
+ * $Id: sndqueue.h 476 2009-12-01 13:54:42Z zagor $
  *
  */
 
@@ -7,7 +7,11 @@
 #define DESPOTIFY_SNDQUEUE_H
 
 #include <pthread.h>
-#include <vorbis/vorbisfile.h>
+#if defined(USE_TREMOR)
+# include <tremor/ivorbisfile.h>
+#else
+# include <vorbis/vorbisfile.h>
+#endif
 
 #include "despotify.h"
 
@@ -71,5 +75,5 @@ size_t snd_ov_read_callback(void *ptr, size_t size, size_t nmemb, void* ds);
 long snd_pcm_read(struct despotify_session* ds,
                   char *buffer, int length, int bigendianp,
                   int word, int sgned, int *bitstream);
-int snd_get_pcm(struct despotify_session*, struct pcm_data*);
+int snd_get_pcm(struct despotify_session*, struct ds_pcm_data*);
 #endif

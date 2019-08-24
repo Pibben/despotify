@@ -63,7 +63,7 @@ void xmlatof(float* dest, ezxml_t xml, ...)
     }
 }
 
-void xml_parse_version(struct playlist* pl, ezxml_t xml, ...)
+void xml_parse_version(struct ds_playlist* pl, ezxml_t xml, ...)
 {
     va_list ap;
     ezxml_t r;
@@ -85,7 +85,7 @@ void xml_parse_version(struct playlist* pl, ezxml_t xml, ...)
     }
 }
 
-struct playlist* xml_parse_playlist(struct playlist* pl,
+struct ds_playlist* xml_parse_playlist(struct ds_playlist* pl,
                                     unsigned char* xml,
                                     int len,
                                     bool list_of_lists)
@@ -102,13 +102,13 @@ struct playlist* xml_parse_playlist(struct playlist* pl,
 
     if (list_of_lists) {
         /* create list of playlists */
-        struct playlist* prev = NULL;
-        struct playlist* p = pl;
+        struct ds_playlist* prev = NULL;
+        struct ds_playlist* p = pl;
 
         for (char* id = strtok(items, ",\n"); id; id = strtok(NULL, ",\n"))
         {
             if (prev) {
-                p = calloc(1, sizeof(struct playlist));
+                p = calloc(1, sizeof(struct ds_playlist));
                 prev->next = p;
             }
             DSFYstrncpy(p->playlist_id, id, sizeof p->playlist_id);
@@ -117,14 +117,14 @@ struct playlist* xml_parse_playlist(struct playlist* pl,
     }
     else {
         /* create list of tracks */
-        struct track* prev = NULL;
-        struct track* root = NULL;
-        struct track* t = NULL;
+        struct ds_track* prev = NULL;
+        struct ds_track* root = NULL;
+        struct ds_track* t = NULL;
 
         int track_count = 0;
         for (char* id = strtok(items, ",\n"); id; id = strtok(NULL, ",\n"))
         {
-            t = calloc(1, sizeof(struct track));
+            t = calloc(1, sizeof(struct ds_track));
             if (prev)
                 prev->next = t;
             else
@@ -147,7 +147,7 @@ struct playlist* xml_parse_playlist(struct playlist* pl,
     return pl;
 }
 
-bool xml_parse_confirm(struct playlist* pl,
+bool xml_parse_confirm(struct ds_playlist* pl,
                        unsigned char* xml,
                        int len)
 {
@@ -163,21 +163,21 @@ bool xml_parse_confirm(struct playlist* pl,
     return confirm;
 }
 
-void xml_free_playlist(struct playlist* pl)
+void xml_free_playlist(struct ds_playlist* pl)
 {
     void* next_list = pl;
-    for (struct playlist* p = next_list; next_list; p = next_list) {
+    for (struct ds_playlist* p = next_list; next_list; p = next_list) {
         xml_free_track(p->tracks);
         next_list = p->next;
         free(p);
     }
 }
 
-static int parse_tracks(ezxml_t xml, struct track* t, bool ordered, bool high_bitrate)
+static int parse_tracks(ezxml_t xml, struct ds_track* t, bool ordered, bool high_bitrate)
 {
     int track_count = 0;
-    struct track* prev = NULL;
-    struct track* root = t;
+    struct ds_track* prev = NULL;
+    struct ds_track* root = t;
 
     for (ezxml_t track = ezxml_get(xml, "track",-1); track; track = track->next)
     {
@@ -186,7 +186,7 @@ static int parse_tracks(ezxml_t xml, struct track* t, bool ordered, bool high_bi
         if (ordered) {
             char tid[33];
             xmlstrncpy(tid, sizeof tid, track, "id", -1);
-            struct track* tt;
+            struct ds_track* tt;
             for (tt = root; tt; tt = tt->next)
                 if (!tt->has_meta_data &&
                     !strncmp(tt->track_id, tid, sizeof tt->track_id))
@@ -219,7 +219,7 @@ static int parse_tracks(ezxml_t xml, struct track* t, bool ordered, bool high_bi
         }
         else
             if (!t) {
-                t = calloc(1, sizeof(struct track));
+                t = calloc(1, sizeof(struct ds_track));
                 prev->next = t;
             }
 
@@ -231,13 +231,13 @@ static int parse_tracks(ezxml_t xml, struct track* t, bool ordered, bool high_bi
         xmlstrncpy(t->album_id, sizeof t->album_id, track, "album-id", -1);
 
         /* create list of artists */
-        struct artist* preva = NULL;
-        struct artist* artist = calloc(1, sizeof(struct artist));
+        struct ds_artist* preva = NULL;
+        struct ds_artist* artist = calloc(1, sizeof(struct ds_artist));
         t->artist = artist;
         ezxml_t xid = ezxml_get(track, "artist-id", -1);
         for (ezxml_t xa = ezxml_get(track, "artist", -1); xa; xa = xa->next) {
             if (preva) {
-                artist = calloc(1, sizeof(struct artist));
+                artist = calloc(1, sizeof(struct ds_artist));
                 preva->next = artist;
             }
             DSFYstrncpy(artist->name, xa->txt, sizeof artist->name);
@@ -285,6 +285,8 @@ static int parse_tracks(ezxml_t xml, struct track* t, bool ordered, bool high_bi
                             continue;
                         }
                     }
+                } else {
+                    continue;
                 }
 
                 char* id = (char*)ezxml_attr(file, "id");
@@ -330,10 +332,10 @@ static int parse_tracks(ezxml_t xml, struct track* t, bool ordered, bool high_bi
     return track_count;
 }
 
-void xml_free_track(struct track* head)
+void xml_free_track(struct ds_track* head)
 {
     void* next_track = head;
-    for (struct track* t = next_track; next_track; t = next_track) {
+    for (struct ds_track* t = next_track; next_track; t = next_track) {
         if (t->key)
             free(t->key);
         
@@ -351,7 +353,7 @@ void xml_free_track(struct track* head)
 }
 
 
-static void parse_album(ezxml_t top, struct album* a) {
+static void parse_album(ezxml_t top, struct ds_album* a) {
     xmlstrncpy(a->name, sizeof a->name, top, "name", -1);
     xmlstrncpy(a->id, sizeof a->id, top, "id", -1);
     xmlstrncpy(a->artist, sizeof a->artist, top, "artist-name", -1);
@@ -360,7 +362,7 @@ static void parse_album(ezxml_t top, struct album* a) {
     xmlatof(&a->popularity, top, "popularity", -1);
 }
 
-static void parse_artist(ezxml_t top, struct artist *a) {
+static void parse_artist(ezxml_t top, struct ds_artist *a) {
     xmlstrncpy(a->name, sizeof a->name, top, "name", -1);
     xmlstrncpy(a->id, sizeof a->id, top, "id", -1);
     xmlstrncpy(a->portrait_id, sizeof a->portrait_id, top,
@@ -368,7 +370,7 @@ static void parse_artist(ezxml_t top, struct artist *a) {
     xmlatof(&a->popularity, top, "popularity", -1);
 }
 
-static void parse_browse_album(ezxml_t top, struct album_browse* a, bool high_bitrate)
+static void parse_browse_album(ezxml_t top, struct ds_album_browse* a, bool high_bitrate)
 {
     xmlstrncpy(a->name, sizeof a->name, top, "name", -1);
     xmlstrncpy(a->id, sizeof a->id, top, "id", -1);
@@ -377,13 +379,13 @@ static void parse_browse_album(ezxml_t top, struct album_browse* a, bool high_bi
     xmlatof(&a->popularity, top, "popularity", -1);
 
     /* TODO: support multiple discs per album  */
-    a->tracks = calloc(1, sizeof(struct track));
+    a->tracks = calloc(1, sizeof(struct ds_track));
     ezxml_t disc = ezxml_get(top, "discs",0,"disc", -1);
     a->num_tracks = parse_tracks(disc, a->tracks, false, high_bitrate);
 
     /* Copy missing metadata from album to tracks */
     int count = 0;
-    for (struct track *t = a->tracks; t; t = t->next) {
+    for (struct ds_track *t = a->tracks; t; t = t->next) {
         DSFYstrncpy(t->album, a->name, sizeof t->album);
         DSFYstrncpy(t->album_id, a->id, sizeof t->album_id);
         DSFYstrncpy(t->cover_id, a->cover_id, sizeof t->cover_id);
@@ -393,7 +395,7 @@ static void parse_browse_album(ezxml_t top, struct album_browse* a, bool high_bi
 }
 
 
-int xml_parse_tracklist(struct track* firsttrack,
+int xml_parse_tracklist(struct ds_track* firsttrack,
                         unsigned char* xml,
                         int len,
                         bool ordered,
@@ -409,8 +411,8 @@ int xml_parse_tracklist(struct track* firsttrack,
 }
 
 
-int xml_parse_search(struct search_result* search,
-                     struct track* firsttrack,
+int xml_parse_search(struct ds_search_result* search,
+                     struct ds_track* firsttrack,
                      unsigned char* xml,
                      int len,
                      bool high_bitrate)
@@ -424,12 +426,12 @@ int xml_parse_search(struct search_result* search,
     xmlatoi(&search->total_tracks, top, "total-tracks", -1);
 
     ezxml_t artists = ezxml_get(top, "artists",-1);
-    struct artist *prev = NULL;
-    struct artist *artist = calloc(1, sizeof(struct artist));
+    struct ds_artist *prev = NULL;
+    struct ds_artist *artist = calloc(1, sizeof(struct ds_artist));
     search->artists = artist;
     for (ezxml_t xa = ezxml_get(artists, "artist", -1); xa; xa = xa->next) {
         if(prev) {
-            artist = calloc(1, sizeof(struct artist));
+            artist = calloc(1, sizeof(struct ds_artist));
             prev->next = artist;
         }
 
@@ -438,12 +440,12 @@ int xml_parse_search(struct search_result* search,
     }
 
     ezxml_t albums = ezxml_get(top, "albums",-1);
-    struct album *aprev = NULL;
-    struct album *album = calloc(1, sizeof(struct album));
+    struct ds_album *aprev = NULL;
+    struct ds_album *album = calloc(1, sizeof(struct ds_album));
     search->albums = album;
     for (ezxml_t xa = ezxml_get(albums, "album", -1); xa; xa = xa->next) {
         if(aprev) {
-            album = calloc(1, sizeof(struct album));
+            album = calloc(1, sizeof(struct ds_album));
             aprev->next = album;
         }
 
@@ -460,7 +462,7 @@ int xml_parse_search(struct search_result* search,
 }
 
 
-bool xml_parse_browse_artist(struct artist_browse* a,
+bool xml_parse_browse_artist(struct ds_artist_browse* a,
                              unsigned char* xml,
                              int len,
                              bool high_bitrate)
@@ -484,13 +486,13 @@ bool xml_parse_browse_artist(struct artist_browse* a,
 
     /* traverse albums */
     x = ezxml_get(top, "albums",-1);
-    struct album_browse* prev = NULL;
-    struct album_browse* album = calloc(1, sizeof(struct album_browse));
+    struct ds_album_browse* prev = NULL;
+    struct ds_album_browse* album = calloc(1, sizeof(struct ds_album_browse));
     a->albums = album;
     int album_count = 0;
     for (ezxml_t xalb = ezxml_get(x, "album", -1); xalb; xalb = xalb->next) {
         if (prev) {
-            album = calloc(1, sizeof(struct album));
+            album = calloc(1, sizeof(struct ds_album));
             prev->next = album;
         }
 
@@ -505,15 +507,15 @@ bool xml_parse_browse_artist(struct artist_browse* a,
     return true;
 }
 
-void xml_free_artist(struct artist *artist) {
-    struct artist* next_artist = artist;
-    for (struct artist* a = next_artist; next_artist; a = next_artist) {
+void xml_free_artist(struct ds_artist *artist) {
+    struct ds_artist* next_artist = artist;
+    for (struct ds_artist* a = next_artist; next_artist; a = next_artist) {
         next_artist = a->next;
         free(a);
     }
 }
 
-void xml_free_artist_browse(struct artist_browse* artist)
+void xml_free_artist_browse(struct ds_artist_browse* artist)
 {
     if (artist->text)
         free(artist->text);
@@ -522,7 +524,7 @@ void xml_free_artist_browse(struct artist_browse* artist)
     free(artist);
 }
 
-bool xml_parse_browse_album(struct album_browse* a,
+bool xml_parse_browse_album(struct ds_album_browse* a,
                             unsigned char* xml,
                             int len,
                             bool high_bitrate)
@@ -534,26 +536,26 @@ bool xml_parse_browse_album(struct album_browse* a,
     return true;
 }
 
-void xml_free_album(struct album* album)
+void xml_free_album(struct ds_album* album)
 {
-    struct album* next_album = album;
-    for (struct album* a = next_album; next_album; a = next_album) {
+    struct ds_album* next_album = album;
+    for (struct ds_album* a = next_album; next_album; a = next_album) {
         next_album = a->next;
         free(a);
     }
 }
 
-void xml_free_album_browse(struct album_browse* album)
+void xml_free_album_browse(struct ds_album_browse* album)
 {
-    struct album_browse* next_album = album;
-    for (struct album_browse* a = next_album; next_album; a = next_album) {
+    struct ds_album_browse* next_album = album;
+    for (struct ds_album_browse* a = next_album; next_album; a = next_album) {
         xml_free_track(a->tracks);
         next_album = a->next;
         free(a);
     }
 }
 
-void xml_parse_prodinfo(struct user_info* u, unsigned char* xml, int len)
+void xml_parse_prodinfo(struct ds_user_info* u, unsigned char* xml, int len)
 {
     ezxml_t top = ezxml_parse_str(xml, len);
     xmlstrncpy(u->type, sizeof u->type, top, "product", 0, "type", -1);

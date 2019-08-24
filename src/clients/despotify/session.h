@@ -9,27 +9,28 @@
 #include "despotify.h"
 
 typedef enum sess_state {
-  SESS_OFFLINE,
-  SESS_ONLINE,
-  SESS_ERROR
+    SESS_OFFLINE,
+    SESS_ONLINE,
+    SESS_ERROR
 } sess_state_t;
 
 typedef struct sess_search {
-  struct search_result *res;
-  struct sess_search   *next;
+    struct ds_search_result *res;
+    struct sess_search   *next;
 } sess_search_t;
 
 typedef struct session {
-  sess_state_t state;
-  struct despotify_session *dsfy;
-  char *username;
-  char *password;
+    sess_state_t state;
+    struct despotify_session *dsfy;
+    char *username;
+    char *password;
+    bool low_bitrate;
 
-  bool playing;
-  bool paused;
+    bool playing;
+    bool paused;
 
-  sess_search_t *search;
-  unsigned int   search_len;
+    sess_search_t *search;
+    unsigned int   search_len;
 } session_t;
 
 void sess_init();
@@ -42,7 +43,7 @@ void sess_username(const char *username);
 void sess_password(const char *password);
 
 void sess_search(const char *query);
-void sess_play(struct track *t);
+void sess_play(struct ds_track *t);
 void sess_stop();
 void sess_pause();
 

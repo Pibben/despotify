@@ -71,7 +71,7 @@ static void thread_exit(void)
 static void* thread_loop(void* arg)
 {
     struct despotify_session* ds = arg;
-    struct pcm_data pcm;
+    struct ds_pcm_data pcm;
     
     pthread_mutex_init(&thread_mutex, NULL);
     pthread_cond_init(&thread_cond, NULL);
@@ -110,9 +110,9 @@ static void* thread_loop(void* arg)
 
 /**************** UI (main) thread stuff: ***************/
 
-struct playlist* get_playlist(struct playlist* rootlist, int num)
+struct ds_playlist* get_playlist(struct ds_playlist* rootlist, int num)
 {
-    struct playlist* p = rootlist;
+    struct ds_playlist* p = rootlist;
 
     if (!p) {
         wrapper_wprintf(L"Stored lists not loaded. Run 'list' without parameter to load.\n");
@@ -130,20 +130,20 @@ struct playlist* get_playlist(struct playlist* rootlist, int num)
     return p;
 }
 
-void print_list_of_lists(struct playlist* rootlist)
+void print_list_of_lists(struct ds_playlist* rootlist)
 {
     if (!rootlist) {
         wrapper_wprintf(L" <no stored playlists>\n");
     }
     else {
         int count=1;
-        for (struct playlist* p = rootlist; p; p = p->next)
+        for (struct ds_playlist* p = rootlist; p; p = p->next)
             wrapper_wprintf(L"%2d: %-40s %3d %c %s\n", count++, p->name, p->num_tracks,
                    p->is_collaborative ? '*' : ' ', p->author);
     }
 }
 
-void print_tracks(struct track* head)
+void print_tracks(struct ds_track* head)
 {
     if (!head) {
         wrapper_wprintf(L" <empty playlist>\n");
@@ -151,11 +151,11 @@ void print_tracks(struct track* head)
     }
 
     int count = 1;
-    for (struct track* t = head; t; t = t->next) {
+    for (struct ds_track* t = head; t; t = t->next) {
         if (t->has_meta_data) {
             wrapper_wprintf(L"%3d: %-40s %2d:%02d ", count++, t->title,
                    t->length / 60000, t->length % 60000 / 1000);
-            for (struct artist* a = t->artist; a; a = a->next)
+            for (struct ds_artist* a = t->artist; a; a = a->next)
                 wrapper_wprintf(L"%s%s", a->name, a->next ? ", " : "");
             wrapper_wprintf(L" %s\n", t->playable ? "" : "(Unplayable)");
         }
@@ -164,13 +164,13 @@ void print_tracks(struct track* head)
     }
 }
 
-void print_track_full(struct track* t)
+void print_track_full(struct ds_track* t)
 {
     if(t->has_meta_data) {
         wrapper_wprintf(L"\nTitle: %s\nAlbum: %s\nArtist(s): ",
                t->title, t->album);
 
-        for (struct artist* a = t->artist; a; a = a->next)
+        for (struct ds_artist* a = t->artist; a; a = a->next)
             wrapper_wprintf(L"%s%s", a->name, a->next ? ", " : "");
 
         wrapper_wprintf(L"\nYear: %d\nLength: %02d:%02d\n\n",
@@ -180,32 +180,32 @@ void print_track_full(struct track* t)
     }
 }
 
-void print_album(struct album_browse* a)
+void print_album(struct ds_album_browse* a)
 {
     wrapper_wprintf(L"\nName: %s\nYear: %d\n",
             a->name, a->year);
     print_tracks(a->tracks);
 }
 
-void print_artist(struct artist_browse* a)
+void print_artist(struct ds_artist_browse* a)
 {
     wrapper_wprintf(L"\nName: %s\n"
            "Genres: %s\n"
            "Years active: %s\n"
            "%d albums:\n",
            a->name, a->genres, a->years_active, a->num_albums);
-    for (struct album_browse* al = a->albums; al; al = al->next)
+    for (struct ds_album_browse* al = a->albums; al; al = al->next)
         wrapper_wprintf(L" %s (%d)\n", al->name, al->year);
 }
 
-void print_playlist(struct playlist* pls)
+void print_playlist(struct ds_playlist* pls)
 {
     wrapper_wprintf(L"\nName: %s\nAuthor: %s\n",
            pls->name, pls->author);
     print_tracks(pls->tracks);
 }
 
-void print_search(struct search_result *search)
+void print_search(struct ds_search_result *search)
 {
     if (search->suggestion[0])
         wrapper_wprintf(L"\nDid you mean \"%s\"?\n", search->suggestion);
@@ -213,13 +213,13 @@ void print_search(struct search_result *search)
     if (search->total_artists > 0) {
         wrapper_wprintf(L"\nArtists found (%d):\n", search->total_artists);
 
-        for (struct artist* artist = search->artists; artist; artist = artist->next)
+        for (struct ds_artist* artist = search->artists; artist; artist = artist->next)
             wrapper_wprintf(L" %s\n", artist->name);
     }
 
     if (search->total_albums > 0) {
         wrapper_wprintf(L"\nAlbums found (%d):\n", search->total_albums);
-        for (struct album* album = search->albums; album; album = album->next)
+        for (struct ds_album* album = search->albums; album; album = album->next)
             wrapper_wprintf(L" %s\n", album->name);
     }
 
@@ -231,7 +231,7 @@ void print_search(struct search_result *search)
 
 void print_info(struct despotify_session* ds)
 {
-    struct user_info* user = ds->user_info;
+    struct ds_user_info* user = ds->user_info;
     wrapper_wprintf(L"Username       : %s\n", user->username);
     wrapper_wprintf(L"Country        : %s\n", user->country);
     wrapper_wprintf(L"Account type   : %s\n", user->type);
@@ -276,11 +276,11 @@ void command_loop(struct despotify_session* ds)
 {
     bool loop = true;
     char *buf;
-    struct playlist* rootlist = NULL;
-    struct playlist* searchlist = NULL;
-    struct playlist* lastlist = NULL;
-    struct search_result *search = NULL;
-    struct album_browse* playalbum = NULL;
+    struct ds_playlist* rootlist = NULL;
+    struct ds_playlist* searchlist = NULL;
+    struct ds_playlist* lastlist = NULL;
+    struct ds_search_result *search = NULL;
+    struct ds_album_browse* playalbum = NULL;
 
     print_help();
 
@@ -298,7 +298,7 @@ void command_loop(struct despotify_session* ds)
 	    	num = atoi(buf + 5);
 
             if (num) {
-                struct playlist* p = get_playlist(rootlist, num);
+                struct ds_playlist* p = get_playlist(rootlist, num);
 
                 if (p) {
                     print_tracks(p->tracks);
@@ -322,7 +322,7 @@ void command_loop(struct despotify_session* ds)
             }
 
             if (num && name && name[0]) {
-                struct playlist* p = get_playlist(rootlist, num);
+                struct ds_playlist* p = get_playlist(rootlist, num);
 
                 if (p) {
                     if (despotify_rename_playlist(ds, p, name))
@@ -342,7 +342,7 @@ void command_loop(struct despotify_session* ds)
                 num = atoi(buf + 7);
 
             if (num) {
-                struct playlist* p = get_playlist(rootlist, num);
+                struct ds_playlist* p = get_playlist(rootlist, num);
 
                 if (p) {
                     if (despotify_set_playlist_collaboration(ds, p, !p->is_collaborative))
@@ -406,12 +406,12 @@ void command_loop(struct despotify_session* ds)
             }
 
             /* find the requested track */
-            struct track* t = lastlist->tracks;
+            struct ds_track* t = lastlist->tracks;
             for (int i=1; i<num; i++)
                 t = t->next;
 
-            for (struct artist* aptr = t->artist; aptr; aptr = aptr->next) {
-                struct artist_browse* a = despotify_get_artist(ds, aptr->id);
+            for (struct ds_artist* aptr = t->artist; aptr; aptr = aptr->next) {
+                struct ds_artist_browse* a = despotify_get_artist(ds, aptr->id);
                 print_artist(a);
                 despotify_free_artist_browse(a);
             }
@@ -434,12 +434,12 @@ void command_loop(struct despotify_session* ds)
             }
 
             /* find the requested track */
-            struct track* t = lastlist->tracks;
+            struct ds_track* t = lastlist->tracks;
             for (int i=1; i<num; i++)
                 t = t->next;
 
             if (t) {
-                struct album_browse* a = despotify_get_album(ds, t->album_id);
+                struct ds_album_browse* a = despotify_get_album(ds, t->album_id);
                 if (a) {
                     print_album(a);
                     despotify_free_album_browse(a);
@@ -466,7 +466,7 @@ void command_loop(struct despotify_session* ds)
             }
 
             /* find the requested track */
-            struct track* t = lastlist->tracks;
+            struct ds_track* t = lastlist->tracks;
             for (int i=1; i<num; i++)
                 t = t->next;
 
@@ -497,12 +497,12 @@ void command_loop(struct despotify_session* ds)
                 continue;
             }
 
-            struct link* link = despotify_link_from_uri(uri);
-            struct album_browse* al;
-            struct artist_browse* ar;
-            struct playlist* pls;
-            struct search_result* s;
-            struct track* t;
+            struct ds_link* link = despotify_link_from_uri(uri);
+            struct ds_album_browse* al;
+            struct ds_artist_browse* ar;
+            struct ds_playlist* pls;
+            struct ds_search_result* s;
+            struct ds_track* t;
 
             switch(link->type) {
                 case LINK_TYPE_ALBUM:
@@ -569,10 +569,10 @@ void command_loop(struct despotify_session* ds)
             }
 
             /* find the requested artist */
-            struct track* t = lastlist->tracks;
+            struct ds_track* t = lastlist->tracks;
             for (int i=1; i<num; i++)
                 t = t->next;
-            struct artist_browse* a = despotify_get_artist(ds, t->artist->id);
+            struct ds_artist_browse* a = despotify_get_artist(ds, t->artist->id);
             if (a && a->portrait_id[0]) {
                 int len;
                 void* portrait = despotify_get_image(ds, a->portrait_id, &len);
@@ -608,12 +608,12 @@ void command_loop(struct despotify_session* ds)
             }
 
             /* find the requested album */
-            struct track* t = lastlist->tracks;
+            struct ds_track* t = lastlist->tracks;
             for (int i=1; i<num; i++)
                 t = t->next;
 
             if (t) {
-                struct album_browse* a = despotify_get_album(ds, t->album_id);
+                struct ds_album_browse* a = despotify_get_album(ds, t->album_id);
                 if (a && a->cover_id[0]) {
                     int len;
                     void* cover = despotify_get_image(ds, a->cover_id, &len);
@@ -641,7 +641,7 @@ void command_loop(struct despotify_session* ds)
             }
 
             /* skip to track <num>, else play next */
-            struct track* t;
+            struct ds_track* t;
             if (buf[4]) {
                 int listoffset = atoi(buf + 5);
                 t = lastlist->tracks;
@@ -709,7 +709,7 @@ void callback(struct despotify_session* ds, int signal, void* data, void* callba
 
     switch (signal) {
         case DESPOTIFY_NEW_TRACK: {
-            struct track* t = data;
+            struct ds_track* t = data;
             wrapper_wprintf(L"New track: %s / %s (%d:%02d) %d kbit/s\n",
                             t->title, t->artist->name,
                             t->length / 60000, t->length % 60000 / 1000,
@@ -770,7 +770,7 @@ int main(int argc, char** argv)
 
 #if 0
     {
-        struct track* t = despotify_get_track(ds, "d1b264bb6bcd46be852ceba8ac5e6582");
+        struct ds_track* t = despotify_get_track(ds, "d1b264bb6bcd46be852ceba8ac5e6582");
         despotify_play(ds, t, false);
         thread_play();
 
